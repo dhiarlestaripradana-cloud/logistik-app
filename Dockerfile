@@ -21,7 +21,7 @@ RUN apk add --no-cache openssl
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Prisma client wajib digenerate sebelum build
-RUN npx prisma generate
+RUN npx --yes prisma@6.19.3 generate
 RUN npm run build
 
 # ---------- Stage 3: runner (produksi) ----------
@@ -63,4 +63,4 @@ EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
 
 # Jalankan migrasi lalu start server
-CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
+CMD ["sh", "-c", "npx --yes prisma@6.19.3 migrate deploy && node server.js"]
