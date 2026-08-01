@@ -1,0 +1,523 @@
+// =============================================================
+//  SCHEMA PRISMA — Sistem Operasional Logistik & Manajemen Armada
+//  REVISI SPRINT 1 (revisi_skema_operasional)
+//  Referensi: Blueprint Fase 1 Bab 2 + Instruksi Revisi Owner:
+//    1. DriverProfile  : + jenisKelamin, tempatLahir, tanggalLahir
+//    2. Kendaraan      : − jenisArmada (& enum), + jenisBbm (enum)
+//                        umur TETAP derived dari tanggalPembelian (tanpa kolom statis)
+//    3. Customer       : + kodeCustomer (unique), sales, wilayah
+//    4. OperasionalLain: MODEL BARU — pengeluaran kantor non-driver,
+//                        tertaut 1-1 ke entri ArusKas (transaksi atomik)
+//    5. ArusKas        : + pemberi, penerima (tetap append-only)
+//    6. LaporanDriver & BiayaPerjalanan: tidak berubah — sudah
+//                        mengakomodasi 7 parameter wajib (lihat catatan model)
+//
+//  Prinsip tetap: uang = Decimal, waktu = Timestamptz (TZ Asia/Jakarta
+//  di level container), snake_case di DB via @map/@@map.
+// =============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------- ENUMS -------------------------
+
+enum Role {
+  SUPER_ADMIN
+  OPERASIONAL // staf kantor: hanya boleh mencatat PENGELUARAN di /operasional
+  DRIVER
+}
+
+enum JenisKelamin {
+  LAKI_LAKI
+  PEREMPUAN
+}
+
+enum JenisSim {
+  A
+  B1
+  B1_UMUM
+  B2
+  B2_UMUM
+  C
+}
+
+enum JenisBbm {
+  SOLAR
+  DEXLITE
+  PERTAMINA_DEX
+  PERTALITE
+  PERTAMAX
+  PERTAMAX_TURBO
+  LAINNYA
+}
+
+enum StatusKendaraan {
+  TERSEDIA
+  DALAM_PERJALANAN
+  PERLU_SERVIS
+  DALAM_SERVIS
+  NONAKTIF
+}
+
+enum StatusPerjalanan {
+  DRAFT
+  DITUGASKAN
+  BERJALAN
+  MENUNGGU_VERIFIKASI
+  SELESAI
+  DIBATALKAN
+}
+
+enum StatusDrop {
+  MENUNGGU
+  TERKIRIM
+  GAGAL
+}
+
+enum StatusLaporan {
+  DRAFT
+  SUBMITTED
+  PERLU_REVISI
+  DISETUJUI
+}
+
+enum KategoriBiaya {
+  BBM
+  PAK_OGAH
+  PARKIR
+  STEAM
+  SERVIS_DARURAT
+  LAINNYA
+}
+
+enum TipeKas {
+  MASUK
+  KELUAR
+}
+
+enum KategoriKas {
+  MODAL_MASUK
+  SETTLEMENT_TRIP
+  OPERASIONAL_LAIN
+  ATK
+  LISTRIK_AIR
+  SERVIS_BENGKEL
+  PAJAK_KIR
+  GAJI
+  LAIN_LAIN
+}
+
+enum JenisServis {
+  RUTIN
+  DARURAT_LAPANGAN
+}
+
+enum KategoriPengirim {
+  SALES
+  OJOL
+  EKSPEDISI
+}
+
+enum StatusSjEksternal {
+  DIBAWA
+  DIKEMBALIKAN
+}
+
+// ------------------------- 1. USERS -------------------------
+
+model User {
+  id           String   @id @default(uuid())
+  nama         String   @db.VarChar(100)
+  username     String   @unique @db.VarChar(50)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  role         Role
+  telepon      String?  @db.VarChar(20)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  driverProfile   DriverProfile?
+  perjalananDrive Perjalanan[]      @relation("DriverPerjalanan")
+  perjalananBuat  Perjalanan[]      @relation("AdminPembuat")
+  perjalananVerif Perjalanan[]      @relation("Verifikator")
+  arusKas         ArusKas[]
+  operasionalLain OperasionalLain[]
+  sjEksternal     SuratJalanEksternal[]
+
+  @@index([role])
+  @@map("users")
+}
+
+// ------------------------- 2. DRIVER PROFILE -------------------------
+//  `nama` TIDAK diduplikasi di sini — sumber tunggal di User.nama.
+//  Semua query profil driver wajib `include: { user: true }`.
+//  REVISI: data SIM dipindah ke model DriverSim (1-to-many) —
+//  satu driver bisa memegang beberapa SIM (mis. B1 Umum + C).
+
+model DriverProfile {
+  id           String        @id @default(uuid())
+  userId       String        @unique @map("user_id")
+  jenisKelamin JenisKelamin? @map("jenis_kelamin")
+  tempatLahir  String?       @map("tempat_lahir") @db.VarChar(100)
+  tanggalLahir DateTime?     @map("tanggal_lahir") @db.Date
+  alamat       String?       @db.Text
+  fotoUrl      String?       @map("foto_url") @db.VarChar(255)
+
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sims DriverSim[]
+
+  @@map("driver_profiles")
+}
+
+// ------------------------- 2b. DRIVER SIM (1-to-many) -------------------------
+//  Masa berlaku tiap SIM ikut sistem alert H-14 (util statusDokumen).
+
+model DriverSim {
+  id              String   @id @default(uuid())
+  driverProfileId String   @map("driver_profile_id")
+  noSim           String   @map("no_sim") @db.VarChar(30)
+  jenisSim        JenisSim @map("jenis_sim")
+  masaBerlakuSim  DateTime @map("masa_berlaku_sim") @db.Date
+
+  driverProfile DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+
+  @@index([driverProfileId])
+  @@map("driver_sim")
+}
+
+// ------------------------- 3. KENDARAAN -------------------------
+//  UMUR KENDARAAN: sengaja TIDAK ada kolom umur. Dihitung dinamis
+//  dari `tanggalPembelian` oleh util umurKendaraan() di
+//  src/lib/utils/date.ts — nilai tidak pernah basi (Blueprint 4.1).
+
+model Kendaraan {
+  id                 String          @id @default(uuid())
+  nomorPolisi        String          @unique @map("nomor_polisi") @db.VarChar(15)
+  merk               String          @db.VarChar(50)
+  tipe               String          @db.VarChar(50)
+  jenisBbm           JenisBbm        @default(SOLAR) @map("jenis_bbm")
+  tahun              Int             @db.SmallInt
+  tanggalPembelian   DateTime        @map("tanggal_pembelian") @db.Date
+  odometerSaatIni    Int             @default(0) @map("odometer_saat_ini")
+  intervalServisKm   Int             @default(10000) @map("interval_servis_km")
+  kmServisTerakhir   Int             @default(0) @map("km_servis_terakhir")
+  pajakBerlakuSampai DateTime        @map("pajak_berlaku_sampai") @db.Date
+  // KIR opsional: motor / mobil operasional non-angkutan-barang tidak punya KIR
+  kirBerlakuSampai   DateTime?       @map("kir_berlaku_sampai") @db.Date
+  standarKmPerLiter  Decimal         @default(0) @map("standar_km_per_liter") @db.Decimal(5, 2)
+  status             StatusKendaraan @default(TERSEDIA)
+  catatan            String?         @db.Text
+  createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  perjalanan Perjalanan[]
+  servis     ServisKendaraan[]
+
+  @@index([status])
+  @@map("kendaraan")
+}
+
+// ------------------------- 4. CUSTOMERS -------------------------
+
+model Customer {
+  id                String   @id @default(uuid())
+  kodeCustomer      String   @unique @map("kode_customer") @db.VarChar(30)
+  nama              String   @db.VarChar(150)
+  alamat            String   @db.Text
+  wilayah           String   @db.VarChar(100)
+  sales             String?  @db.VarChar(100)
+  telepon           String?  @db.VarChar(20)
+  pic               String?  @db.VarChar(100)
+  defaultUangSatpam Decimal  @default(0) @map("default_uang_satpam") @db.Decimal(12, 2)
+  defaultUangGudang Decimal  @default(0) @map("default_uang_gudang") @db.Decimal(12, 2)
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tujuan      TujuanPerjalanan[]
+  sjEksternal SuratJalanEksternal[]
+
+  @@index([isActive])
+  @@index([wilayah])
+  @@map("customers")
+}
+
+// ------------------------- 5. PERJALANAN (Surat Jalan) -------------------------
+
+model Perjalanan {
+  id               String           @id @default(uuid())
+  nomorSj          String           @unique @map("nomor_sj") @db.VarChar(30)
+  kendaraanId      String           @map("kendaraan_id")
+  driverId         String           @map("driver_id")
+  dibuatOleh       String           @map("dibuat_oleh")
+  tanggalBerangkat DateTime         @map("tanggal_berangkat") @db.Timestamptz(6)
+  // Timestamp aktual saat driver menekan "Mulai Perjalanan" (DITUGASKAN→BERJALAN)
+  berangkatAktualAt DateTime?       @map("berangkat_aktual_at") @db.Timestamptz(6)
+  kmAwal           Int              @map("km_awal")
+  kmAkhir          Int?             @map("km_akhir")
+  uangJalan        Decimal          @map("uang_jalan") @db.Decimal(14, 2)
+  status           StatusPerjalanan @default(DRAFT)
+  totalRealisasi   Decimal?         @map("total_realisasi") @db.Decimal(14, 2)
+  selisih          Decimal?         @db.Decimal(14, 2)
+  catatan          String?          @db.Text
+  verifiedBy       String?          @map("verified_by")
+  verifiedAt       DateTime?        @map("verified_at") @db.Timestamptz(6)
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  kendaraan   Kendaraan          @relation(fields: [kendaraanId], references: [id])
+  driver      User               @relation("DriverPerjalanan", fields: [driverId], references: [id])
+  pembuat     User               @relation("AdminPembuat", fields: [dibuatOleh], references: [id])
+  verifikator User?              @relation("Verifikator", fields: [verifiedBy], references: [id])
+  tujuan      TujuanPerjalanan[]
+  laporan     LaporanDriver?
+  arusKas     ArusKas[]
+
+  @@index([status])
+  @@index([driverId, status])
+  @@index([kendaraanId])
+  @@map("perjalanan")
+}
+
+// ------------------------- 6. TUJUAN PERJALANAN (Multi-Drop) -------------------------
+
+model TujuanPerjalanan {
+  id           String     @id @default(uuid())
+  perjalananId String     @map("perjalanan_id")
+  customerId   String     @map("customer_id")
+  urutan       Int        @db.SmallInt
+  uangSatpam   Decimal    @default(0) @map("uang_satpam") @db.Decimal(12, 2)
+  uangGudang   Decimal    @default(0) @map("uang_gudang") @db.Decimal(12, 2)
+  statusDrop   StatusDrop @default(MENUNGGU) @map("status_drop")
+  catatan      String?    @db.Text
+
+  perjalanan Perjalanan        @relation(fields: [perjalananId], references: [id], onDelete: Cascade)
+  customer   Customer          @relation(fields: [customerId], references: [id])
+  biaya      BiayaPerjalanan[]
+
+  @@unique([perjalananId, urutan])
+  @@index([perjalananId])
+  @@map("tujuan_perjalanan")
+}
+
+// ------------------------- 7. LAPORAN DRIVER -------------------------
+//  ✅ KONFIRMASI 7 PARAMETER WAJIB (tidak berubah pada revisi ini):
+//   (1) KM Akhir            → LaporanDriver.kmAkhir (header, 1× per trip)
+//   (2) Pembelian BBM       → BiayaPerjalanan kategori BBM
+//                             (nominal + liter + fotoBuktiUrl WAJIB; boleh multi-baris)
+//   (3) Pak Ogah            → BiayaPerjalanan kategori PAK_OGAH
+//   (4) Parkir per Customer → BiayaPerjalanan kategori PARKIR
+//                             + tujuanPerjalananId WAJIB (tertaut ke titik drop)
+//   (5) Steam / Cuci        → BiayaPerjalanan kategori STEAM
+//   (6) Servis Darurat      → BiayaPerjalanan kategori SERVIS_DARURAT
+//                             (keterangan + fotoBuktiUrl WAJIB) → auto-log ServisKendaraan
+//   (7) Keterangan Lain     → BiayaPerjalanan kategori LAINNYA (nominal + keterangan)
+//  Struktur line-item ini memisahkan tiap biaya per kategori & per titik →
+//  siap diagregasi SUM(kategori) untuk Laporan Audit (Blueprint 5.3.3).
+
+model LaporanDriver {
+  id               String        @id @default(uuid())
+  perjalananId     String        @unique @map("perjalanan_id")
+  kmAkhir          Int           @map("km_akhir")
+  totalBiayaDriver Decimal       @default(0) @map("total_biaya_driver") @db.Decimal(14, 2)
+  status           StatusLaporan @default(DRAFT)
+  catatanDriver    String?       @map("catatan_driver") @db.Text
+  catatanAdmin     String?       @map("catatan_admin") @db.Text
+  submittedAt      DateTime?     @map("submitted_at") @db.Timestamptz(6)
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  perjalanan Perjalanan        @relation(fields: [perjalananId], references: [id], onDelete: Cascade)
+  biaya      BiayaPerjalanan[]
+
+  @@map("laporan_driver")
+}
+
+// ------------------------- 8. BIAYA PERJALANAN (7 Parameter) -------------------------
+
+model BiayaPerjalanan {
+  id                 String        @id @default(uuid())
+  laporanId          String        @map("laporan_id")
+  kategori           KategoriBiaya
+  tujuanPerjalananId String?       @map("tujuan_perjalanan_id")
+  nominal            Decimal       @db.Decimal(12, 2)
+  liter              Decimal?      @db.Decimal(6, 2)
+  keterangan         String?       @db.Text
+  fotoBuktiUrl       String?       @map("foto_bukti_url") @db.VarChar(255)
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  laporan LaporanDriver     @relation(fields: [laporanId], references: [id], onDelete: Cascade)
+  tujuan  TujuanPerjalanan? @relation(fields: [tujuanPerjalananId], references: [id])
+  servis  ServisKendaraan?
+
+  @@index([laporanId])
+  @@index([kategori])
+  @@map("biaya_perjalanan")
+}
+
+// ------------------------- 9. ARUS KAS (Buku Kas — Append-Only) -------------------------
+//  ATURAN EMAS tetap berlaku: TANPA UPDATE/DELETE dari aplikasi.
+//  Koreksi = jurnal balik + entri baru.
+//  Kolom baru `pemberi` & `penerima` melengkapi pembukuan standar:
+//   - MASUK  : pemberi = pihak penyetor,     penerima = "Kas Perusahaan"/admin
+//   - KELUAR : pemberi = "Kas Perusahaan",   penerima = vendor/driver/petugas
+//  Nullable di DB agar entri otomatis sistem fleksibel; form manual
+//  akan MEWAJIBKAN keduanya via Zod di layer aplikasi.
+
+model ArusKas {
+  id           String      @id @default(uuid())
+  nomorRef     String      @unique @map("nomor_ref") @db.VarChar(30)
+  tanggal      DateTime    @db.Date
+  tipe         TipeKas
+  kategori     KategoriKas
+  nominal      Decimal     @db.Decimal(14, 2)
+  keterangan   String      @db.Text
+  pemberi      String?     @db.VarChar(100)
+  penerima     String?     @db.VarChar(100)
+  perjalananId String?     @map("perjalanan_id")
+  saldoSesudah Decimal     @map("saldo_sesudah") @db.Decimal(14, 2)
+  dibuatOleh   String      @map("dibuat_oleh")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  perjalanan  Perjalanan?      @relation(fields: [perjalananId], references: [id])
+  pembuat     User             @relation(fields: [dibuatOleh], references: [id])
+  operasional OperasionalLain?
+
+  @@index([tanggal])
+  @@index([kategori])
+  @@map("arus_kas")
+}
+
+// ------------------------- 10. OPERASIONAL LAIN (BARU) -------------------------
+//  Pengeluaran kantor non-driver: ATK, listrik/air, servis bengkel kantor, dll.
+//  KONTRAK LOGIKA KAS (diimplementasikan di Server Action Sprint 1):
+//    prisma.$transaction([
+//      1. hitung totalHarga = jumlah × hargaSatuan (server-side, jangan percaya klien)
+//      2. INSERT ArusKas { tipe: KELUAR, kategori: OPERASIONAL_LAIN,
+//                          nominal: totalHarga, saldoSesudah: saldo − totalHarga,
+//                          pemberi: "Kas Perusahaan", penerima: <vendor> }
+//      3. INSERT OperasionalLain { ..., arusKasId: <id entri di atas> }
+//    ]) → semua sukses atau semua batal; saldo mustahil terpotong tanpa jejak.
+//  Relasi 1-1 ke ArusKas menjamin SETIAP entri operasional punya
+//  pasangan entri kas yang bisa diaudit (dan sebaliknya via unique).
+
+model OperasionalLain {
+  id          String   @id @default(uuid())
+  tanggal     DateTime @db.Date
+  userId      String   @map("user_id")
+  keterangan  String   @db.Text
+  jumlah      Decimal  @db.Decimal(10, 2)
+  hargaSatuan Decimal  @map("harga_satuan") @db.Decimal(12, 2)
+  totalHarga  Decimal  @map("total_harga") @db.Decimal(14, 2)
+  arusKasId   String   @unique @map("arus_kas_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user    User    @relation(fields: [userId], references: [id])
+  arusKas ArusKas @relation(fields: [arusKasId], references: [id])
+
+  @@index([tanggal])
+  @@map("operasional_lain")
+}
+
+// ------------------------- 11. SERVIS KENDARAAN -------------------------
+
+model ServisKendaraan {
+  id                String      @id @default(uuid())
+  kendaraanId       String      @map("kendaraan_id")
+  tanggal           DateTime    @db.Date
+  jenis             JenisServis
+  kmSaatServis      Int?        @map("km_saat_servis")
+  biaya             Decimal     @default(0) @db.Decimal(12, 2)
+  keterangan        String?     @db.Text
+  fotoNotaUrl       String?     @map("foto_nota_url") @db.VarChar(255)
+  biayaPerjalananId String?     @unique @map("biaya_perjalanan_id")
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  kendaraan       Kendaraan        @relation(fields: [kendaraanId], references: [id])
+  biayaPerjalanan BiayaPerjalanan? @relation(fields: [biayaPerjalananId], references: [id])
+
+  @@index([kendaraanId])
+  @@map("servis_kendaraan")
+}
+
+// ------------------------- 12. SURAT JALAN EKSTERNAL -------------------------
+//  Dokumen pengantar untuk armada LUAR (canvas sales, ojol, ekspedisi/sewa truk).
+//  TERPISAH TOTAL dari model Perjalanan: TIDAK punya uangJalan, TIDAK punya
+//  uangSatpam/uangGudang, dan TIDAK PERNAH menyentuh ArusKas / Dana Pending.
+//  Pemisahan di level skema ini yang menjamin kasbon sopir internal tetap murni.
+
+model SuratJalanEksternal {
+  id               String            @id @default(uuid())
+  nomorSj          String            @unique @map("nomor_sj") @db.VarChar(30)
+  tanggal          DateTime          @db.Date
+  kategoriPengirim KategoriPengirim  @map("kategori_pengirim")
+  namaPengirim     String            @map("nama_pengirim") @db.VarChar(120)
+  customerId       String            @map("customer_id")
+  keteranganBarang String            @map("keterangan_barang") @db.Text
+  status           StatusSjEksternal @default(DIBAWA)
+  dikembalikanAt   DateTime?         @map("dikembalikan_at") @db.Timestamptz(6)
+  dibuatOleh       String            @map("dibuat_oleh")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  pembuat  User     @relation(fields: [dibuatOleh], references: [id])
+
+  @@index([status])
+  @@index([tanggal])
+  @@map("surat_jalan_eksternal")
+}
+
+// ------------------------- 13. MASTER BBM -------------------------
+//  Harga resmi per produk BBM → dipakai menghitung LITER otomatis dari
+//  nominal pembelian di laporan driver (anti human-error & manipulasi).
+//  Harga = Decimal (bukan Float) demi konsistensi aturan uang kita.
+
+model MasterBbm {
+  id            String   @id @default(uuid())
+  namaProduk    String   @unique @map("nama_produk") @db.VarChar(60)
+  hargaPerLiter Decimal  @map("harga_per_liter") @db.Decimal(10, 2)
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([isActive])
+  @@map("master_bbm")
+}
+
+// ------------------------- 14. LOGIN THROTTLE (Rate-Limit Anti Brute-Force) -------------------------
+//  Satu baris per username yang pernah gagal login. Menyimpan hitungan gagal
+//  beruntun + waktu kunci. Berbasis DB (bukan memori) agar lockout BERTAHAN
+//  melewati restart container — penyerang tidak bisa mereset dengan memicu
+//  restart. Baris dihapus otomatis saat login sukses.
+
+model LoginThrottle {
+  id             String    @id @default(uuid())
+  identifier     String    @unique @db.VarChar(60) // username (huruf kecil)
+  gagalCount     Int       @default(0) @map("gagal_count")
+  terkunciSampai DateTime? @map("terkunci_sampai") @db.Timestamptz(6)
+  lastIp         String?   @map("last_ip") @db.VarChar(64)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("login_throttle")
+}
+
+// ------------------------- 15. DOCUMENT COUNTER (Penomoran Atomik) -------------------------
+
+model DocumentCounter {
+  id       String @id @default(uuid())
+  jenis    String @db.VarChar(10) // "SJ" | "KAS" | "SJ-EXT"
+  tahun    Int
+  bulan    Int
+  terakhir Int    @default(0)
+
+  @@unique([jenis, tahun, bulan])
+  @@map("document_counter")
+}

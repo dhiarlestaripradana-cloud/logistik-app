@@ -1,0 +1,82 @@
+# =============================================================
+#  docker-compose.yml — Stack Produksi VPS
+#  Layanan: app (Next.js) · db (PostgreSQL 16) · caddy (reverse proxy + HTTPS otomatis)
+#  Timezone dipaksa ke Asia/Jakarta (WIB) di seluruh container.
+# =============================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: logistik_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: Asia/Jakarta
+      PGTZ: Asia/Jakarta
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Port diekspos ke host agar Prisma CLI di Windows/lokal bisa konek
+    # (permintaan owner — hindari error P1001). Di VPS PRODUKSI, pastikan
+    # firewall (ufw) menutup 5432 dari publik; cukup allow 80/443/SSH.
+    ports:
+      - "5433:5432"
+    networks:
+      - internal
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: logistik_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Jakarta
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_TRUST_HOST: "true"
+      NEXTAUTH_URL: ${APP_URL}
+      NODE_ENV: production
+    volumes:
+      # Penyimpanan foto bukti (struk BBM, nota servis) — persisten di luar container.
+      - uploads:/app/public/uploads
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: logistik_caddy
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      TZ: Asia/Jakarta
+      APP_DOMAIN: ${APP_DOMAIN}
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - internal
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+    driver: bridge
