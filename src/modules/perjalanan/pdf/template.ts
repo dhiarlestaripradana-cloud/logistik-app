@@ -13,6 +13,7 @@ import type { PerjalananDetailDTO } from "../queries";
 export const PERUSAHAAN = {
   nama: "PT Dhiar Lestari Pradana",
   alamat: "Komplek pergudangan, Jl. Sentra Niaga V Jl. Harapan Indah Boulevard, RT.10/RW.8, Pusaka Rakyat, Kec. Tarumajaya, Kabupaten Bekasi, Jawa Barat 17214",
+  telepon: ""
 };
 
 const esc = (s: string | null | undefined) =>
