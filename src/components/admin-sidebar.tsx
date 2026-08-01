@@ -59,7 +59,7 @@ export function AdminSidebar({
         </div>
         <div className="leading-tight">
           <div className="text-sm font-semibold text-slate-900">
-            PT Cinta Kamu
+            PT Dhiar Lestari Pradana
           </div>
           <div className="text-xs text-slate-500">{role === "OPERASIONAL" ? "Panel Operasional" : "Panel Super Admin"}</div>
         </div>
