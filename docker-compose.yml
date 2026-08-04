@@ -8,6 +8,7 @@ services:
   db:
     image: postgres:16-alpine
     container_name: logistik_db
+    init: true
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
