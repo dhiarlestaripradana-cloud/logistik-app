@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { optionalId, optionalStr } from "@/lib/utils/zod";
 
+export const MAKS_TUJUAN = 100;
+
 // Satu baris tujuan pada repeater multi-drop.
 export const tujuanRowSchema = z.object({
   customerId: z
@@ -27,7 +29,7 @@ const tujuanField = z.preprocess((v) => {
 }, z
   .array(tujuanRowSchema)
   .min(1, "Minimal harus ada 1 customer tujuan")
-  .max(20, "Maksimal 20 titik drop per Surat Jalan"));
+  .max(MAKS_TUJUAN, `Maksimal ${MAKS_TUJUAN} titik drop per Surat Jalan`));
 
 export const suratJalanSchema = z
   .object({

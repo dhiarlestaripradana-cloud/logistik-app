@@ -134,7 +134,6 @@ export async function getAnalitik(f: FilterAnalitik): Promise<AnalitikDTO> {
   };
 }
 
-// Opsi filter (armada & driver) untuk form laporan.
 export async function getOpsiFilter() {
   const [kendaraan, drivers] = await Promise.all([
     prisma.kendaraan.findMany({
@@ -150,7 +149,6 @@ export async function getOpsiFilter() {
   return { kendaraan, drivers };
 }
 
-// Builder CSV (delimiter ; — ramah Excel Indonesia; BOM utk UTF-8).
 export function buatCsv(d: AnalitikDTO): string {
   const esc = (v: string | number) => `"${String(v).replaceAll('"', '""')}"`;
   const baris = [
@@ -172,10 +170,6 @@ export function buatCsv(d: AnalitikDTO): string {
   return "\uFEFF" + baris.join("\r\n");
 }
 
-// ---------------------------------------------------------------
-//  LAPORAN PERFORMA & SETTLEMENT PER DRIVER (Revisi Final #4)
-//  Semantik Opsi B: uang diterima = uangJalan + uang drop (satpam+gudang).
-// ---------------------------------------------------------------
 export type TripDriverRow = {
   nomorSj: string;
   tanggal: string;
@@ -188,11 +182,11 @@ export type TripDriverRow = {
   standar: number;
   anomali: boolean;
   uangJalan: number;
-  uangDrop: number;      // Σ satpam+gudang
-  totalTunai: number;    // uangJalan + uangDrop (Opsi B)
+  uangDrop: number;      
+  totalTunai: number;    
   biayaDriver: number;
   totalRealisasi: number;
-  selisih: number;       // tersimpan saat settlement
+  selisih: number;       
   statusSettlement: "KEMBALIAN" | "NOMBOK" | "PAS";
 };
 
@@ -207,7 +201,7 @@ export type LaporanDriverDTO = {
     rasio: number | null;
     totalTunai: number;
     totalRealisasi: number;
-    totalSelisih: number; // + = akumulasi setoran, − = akumulasi nombok
+    totalSelisih: number; 
     anomali: number;
   };
 };
@@ -218,7 +212,6 @@ export async function getLaporanDriver(f: {
   driverId: string;
 }): Promise<LaporanDriverDTO | null> {
   const { dari, sampai } = { ...periodeDefault(), dari: f.dari || undefined, sampai: f.sampai || undefined };
-  // Rentang inklusif [dari 00:00, sampai 24:00) WIB — pola sama dgn getAnalitik.
   const dariDate = startOfDayWIB(dari ?? periodeDefault().dari).toDate();
   const sampaiDate = startOfDayWIB(sampai ?? periodeDefault().sampai)
     .add(1, "day")
@@ -303,16 +296,7 @@ export async function getLaporanDriver(f: {
 }
 
 // ---------------------------------------------------------------
-//  LAPORAN OPERASIONAL PERIODIK (rekap gaya spreadsheet, PDF)
-//  Dua tabel agregat GROUP BY Driver atas trip SELESAI di periode:
-//    Tabel 1 — rincian biaya operasional customer per driver
-//    Tabel 2 — pembelian BBM per driver × armada × jenis BBM
-//  Catatan sumber data (penting untuk akurasi):
-//   - SATPAM & GUDANG = uang drop dari TujuanPerjalanan (BUKAN BiayaPerjalanan;
-//     BiayaPerjalanan tidak punya kategori satpam/gudang).
-//   - JENIS BBM = nama produk yang tercatat saat pembelian (BiayaPerjalanan
-//     .keterangan berformat "Nama @ harga/L") — mencerminkan yang benar-benar
-//     dibeli per transaksi, akurat secara historis meski harga master berubah.
+//  LAPORAN OPERASIONAL PERIODIK
 // ---------------------------------------------------------------
 
 export type OpsBarisCustomer = {
@@ -325,9 +309,17 @@ export type OpsBarisCustomer = {
   steam: number;
   servis: number;
   lain: number;
-  total: number; // satpam+gudang+ogah+parkir+steam+servis+lain (TANPA BBM)
+  total: number;
   jumlahTujuan: number;
+  ketServis: string[];
+  ketLain: string[];
+  catatanDriver: string[];
 };
+
+export type OpsTotalCustomer = Pick<
+  OpsBarisCustomer,
+  "satpam" | "gudang" | "pakOgah" | "parkir" | "steam" | "servis" | "lain" | "total" | "jumlahTujuan"
+>;
 
 export type OpsBarisBbm = {
   driverId: string;
@@ -340,24 +332,30 @@ export type OpsBarisBbm = {
 
 export type LaporanOperasionalDTO = {
   periodeLabel: string;
-  modeLabel: string; // "Semua Driver" | nama driver
+  modeLabel: string; 
   tabel1: OpsBarisCustomer[];
-  total1: Omit<OpsBarisCustomer, "driverId" | "driver">;
+  total1: OpsTotalCustomer;
   tabel2: OpsBarisBbm[];
   total2Bbm: number;
 };
 
-// Ambil nama produk BBM dari keterangan "Nama @ harga/L" → "Nama".
 function jenisBbmDariKeterangan(ket: string | null): string {
   if (!ket) return "(tidak dicatat)";
   const potong = ket.split(" @ ")[0]?.trim();
   return potong || "(tidak dicatat)";
 }
 
+function tambahKet(arr: string[], teks: string | null | undefined, nomorSj: string) {
+  const t = (teks ?? "").trim();
+  if (!t) return;
+  const baris = `${nomorSj} — ${t}`;
+  if (!arr.includes(baris)) arr.push(baris);
+}
+
 export async function getLaporanOperasional(f: {
   dari?: string;
   sampai?: string;
-  driverId?: string; // undefined / "all" = semua driver
+  driverId?: string; 
 }): Promise<LaporanOperasionalDTO> {
   const dari = f.dari || periodeDefault().dari;
   const sampai = f.sampai || periodeDefault().sampai;
@@ -384,15 +382,12 @@ export async function getLaporanOperasional(f: {
     orderBy: [{ driverId: "asc" }, { tanggalBerangkat: "asc" }],
   });
 
-  // ── Agregasi Tabel 1: per driver ──
   const peta1 = new Map<string, OpsBarisCustomer>();
-  // ── Agregasi Tabel 2: per (driver | armada | jenis BBM) ──
   const peta2 = new Map<string, OpsBarisBbm>();
 
   for (const t of trips) {
     const did = t.driver.id;
 
-    // -- Tabel 1 --
     let r1 = peta1.get(did);
     if (!r1) {
       r1 = {
@@ -400,6 +395,7 @@ export async function getLaporanOperasional(f: {
         driver: t.driver.nama,
         satpam: 0, gudang: 0, pakOgah: 0, parkir: 0,
         steam: 0, servis: 0, lain: 0, total: 0, jumlahTujuan: 0,
+        ketServis: [], ketLain: [], catatanDriver: [],
       };
       peta1.set(did, r1);
     }
@@ -409,16 +405,23 @@ export async function getLaporanOperasional(f: {
     }
     r1.jumlahTujuan += t.tujuan.length;
 
+    tambahKet(r1.catatanDriver, t.laporan?.catatanDriver, t.nomorSj);
+
     for (const b of t.laporan?.biaya ?? []) {
       const nom = Number(b.nominal);
       switch (b.kategori) {
         case "PAK_OGAH": r1.pakOgah += nom; break;
         case "PARKIR": r1.parkir += nom; break;
         case "STEAM": r1.steam += nom; break;
-        case "SERVIS_DARURAT": r1.servis += nom; break;
-        case "LAINNYA": r1.lain += nom; break;
+        case "SERVIS_DARURAT": 
+          r1.servis += nom; 
+          tambahKet(r1.ketServis, b.keterangan, t.nomorSj);
+          break;
+        case "LAINNYA": 
+          r1.lain += nom; 
+          tambahKet(r1.ketLain, b.keterangan, t.nomorSj);
+          break;
         case "BBM": {
-          // -- Tabel 2 (hanya baris BBM) --
           const jenis = jenisBbmDariKeterangan(b.keterangan);
           const key = `${did}|${t.kendaraan.nomorPolisi}|${jenis}`;
           let r2 = peta2.get(key);
@@ -440,7 +443,6 @@ export async function getLaporanOperasional(f: {
     }
   }
 
-  // Finalisasi TOTAL Tabel 1 per baris
   const tabel1 = [...peta1.values()].map((r) => {
     r.total = r.satpam + r.gudang + r.pakOgah + r.parkir + r.steam + r.servis + r.lain;
     return r;
@@ -451,7 +453,6 @@ export async function getLaporanOperasional(f: {
     (a, b) => a.driver.localeCompare(b.driver, "id") || a.plat.localeCompare(b.plat)
   );
 
-  // Baris TOTAL keseluruhan Tabel 1
   const total1 = tabel1.reduce(
     (s, r) => ({
       satpam: s.satpam + r.satpam,
@@ -469,7 +470,6 @@ export async function getLaporanOperasional(f: {
 
   const total2Bbm = tabel2.reduce((s, r) => s + r.totalBbm, 0);
 
-  // Label mode: nama driver bila difilter satu, else "Semua Driver".
   let modeLabel = "Semua Driver";
   if (perDriver) {
     const d = await prisma.user.findUnique({

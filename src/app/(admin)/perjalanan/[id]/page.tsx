@@ -43,10 +43,11 @@ export default async function DetailPerjalananPage({
           </div>
         </div>
         <div className="flex gap-2">
-          {d.status === "DRAFT" && (
+          {/* 👇 INI YANG DIUBAH: DRAFT atau DITUGASKAN bisa edit */}
+          {(d.status === "DRAFT" || d.status === "DITUGASKAN") && (
             <Link href={`/perjalanan/${d.id}/edit`}>
               <Button variant="outline">
-                <Pencil size={15} /> Edit Draft
+                <Pencil size={15} /> Edit
               </Button>
             </Link>
           )}

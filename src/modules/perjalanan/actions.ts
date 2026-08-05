@@ -136,12 +136,20 @@ async function simpanSuratJalan(
           status: terbit ? ("DITUGASKAN" as const) : ("DRAFT" as const),
         };
 
+        // Bantuan variabel untuk ngecek status lama di luar blok if
+        let statusLama = null;
+        let kendaraanLamaId = null;
+
         if (d.id) {
-          // ---- EDIT: hanya DRAFT yang boleh diubah ----
+          // ---- EDIT: KUNCI DIBUKA, DRAFT & DITUGASKAN BOLEH DIUBAH ----
           const lama = await tx.perjalanan.findUnique({ where: { id: d.id } });
           if (!lama) throw new TripError("Surat Jalan tidak ditemukan.");
-          if (lama.status !== "DRAFT")
-            throw new TripError("Hanya Surat Jalan berstatus DRAFT yang dapat diedit.");
+          
+          if (lama.status !== "DRAFT" && lama.status !== "DITUGASKAN")
+            throw new TripError("Hanya Surat Jalan yang belum jalan (DRAFT / DITUGASKAN) yang dapat diedit.");
+
+          statusLama = lama.status;
+          kendaraanLamaId = lama.kendaraanId;
 
           await tx.perjalanan.update({
             where: { id: d.id },
@@ -169,6 +177,29 @@ async function simpanSuratJalan(
             where: { id: d.kendaraanId },
             data: { status: "DALAM_PERJALANAN" },
           });
+          
+          // Lepas armada lama jika saat edit mobilnya diganti
+          if (d.id && statusLama === "DITUGASKAN" && kendaraanLamaId && kendaraanLamaId !== d.kendaraanId) {
+             const kLama = await tx.kendaraan.findUnique({ where: { id: kendaraanLamaId }});
+             if (kLama) {
+                await tx.kendaraan.update({
+                  where: { id: kLama.id },
+                  data: { status: statusArmadaSetelahLepas(kLama) }
+                });
+             }
+          }
+        } else if (d.id && statusLama === "DITUGASKAN") {
+          // Kalau asalnya DITUGASKAN (armada kekunci), tapi admin nyimpennya sebagai "DRAFT" 
+          // (batal terbit sementara), armadanya harus dilepas biar bisa dipake orang lain.
+          if (kendaraanLamaId) {
+            const kLama = await tx.kendaraan.findUnique({ where: { id: kendaraanLamaId }});
+            if (kLama) {
+               await tx.kendaraan.update({
+                 where: { id: kLama.id },
+                 data: { status: statusArmadaSetelahLepas(kLama) }
+               });
+            }
+          }
         }
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }

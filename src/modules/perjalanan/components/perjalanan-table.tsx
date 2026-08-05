@@ -130,21 +130,26 @@ export function PerjalananTable({ data }: { data: PerjalananListDTO[] }) {
                 <Printer size={14} /> PDF
               </Button>
             </a>
-            {t.status === "DRAFT" && (
-              <>
-                <Link href={`/perjalanan/${t.id}/edit`}>
-                  <Button size="sm" variant="outline" title="Edit draft">
-                    <Pencil size={14} /> Edit
-                  </Button>
-                </Link>
-                <AksiTrip
-                  label="Terbitkan"
-                  variant="outline"
-                  confirmMsg={`Terbitkan ${t.nomorSj} dan tugaskan driver ${t.driver}? Armada akan terkunci DALAM PERJALANAN.`}
-                  onRun={() => terbitkanSuratJalan(t.id)}
-                />
-              </>
+            
+            {/* 👇 INI YANG DIUBAH: Tombol Edit dipisah biar muncul di DITUGASKAN juga */}
+            {(t.status === "DRAFT" || t.status === "DITUGASKAN") && (
+              <Link href={`/perjalanan/${t.id}/edit`}>
+                <Button size="sm" variant="outline" title="Edit">
+                  <Pencil size={14} /> Edit
+                </Button>
+              </Link>
             )}
+
+            {/* Tombol Terbitkan tetap HANYA untuk DRAFT */}
+            {t.status === "DRAFT" && (
+              <AksiTrip
+                label="Terbitkan"
+                variant="outline"
+                confirmMsg={`Terbitkan ${t.nomorSj} dan tugaskan driver ${t.driver}? Armada akan terkunci DALAM PERJALANAN.`}
+                onRun={() => terbitkanSuratJalan(t.id)}
+              />
+            )}
+
             {(t.status === "DRAFT" || t.status === "DITUGASKAN") && (
               <AksiTrip
                 label="Batalkan"

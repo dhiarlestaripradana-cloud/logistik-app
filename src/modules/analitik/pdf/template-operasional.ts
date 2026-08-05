@@ -14,6 +14,9 @@ const esc = (s: string | null | undefined) =>
 
 const rp = (n: number) => (n > 0 ? formatRupiah(n) : "-");
 
+const ket = (list: string[]) =>
+  list.length ? `<div class="ket">(${esc(list.join(" ; "))})</div>` : "";
+
 export function renderLaporanOperasionalHtml(d: LaporanOperasionalDTO): string {
   // ── Tabel 1: TOTAL OPERASIONAL CUSTOMER ──
   const baris1 = d.tabel1
@@ -21,14 +24,14 @@ export function renderLaporanOperasionalHtml(d: LaporanOperasionalDTO): string {
       (r, i) => `
       <tr>
         <td class="c">${i + 1}</td>
-        <td class="b">${esc(r.driver)}</td>
+        <td class="b">${esc(r.driver)}${ket(r.catatanDriver)}</td>
         <td class="num">${rp(r.satpam)}</td>
         <td class="num">${rp(r.gudang)}</td>
         <td class="num">${rp(r.pakOgah)}</td>
         <td class="num">${rp(r.parkir)}</td>
         <td class="num">${rp(r.steam)}</td>
-        <td class="num">${rp(r.servis)}</td>
-        <td class="num">${rp(r.lain)}</td>
+        <td class="num">${rp(r.servis)}${ket(r.ketServis)}</td>
+        <td class="num">${rp(r.lain)}${ket(r.ketLain)}</td>
         <td class="num b">${rp(r.total)}</td>
         <td class="c">${r.jumlahTujuan}</td>
       </tr>`
@@ -94,13 +97,19 @@ export function renderLaporanOperasionalHtml(d: LaporanOperasionalDTO): string {
   .doc-title h2 { font-size: 15px; letter-spacing: 1px; }
   .doc-title .meta { font-size: 10px; margin-top: 3px; }
   .doc-title .mode { display: inline-block; margin-top: 4px; padding: 2px 10px;
-                     background: #065f46; color: #fff; border-radius: 10px; font-size: 9px; }
+                      background: #065f46; color: #fff; border-radius: 10px; font-size: 9px; }
 
   h3.judul-tabel { margin: 16px 0 6px; font-size: 11px; letter-spacing: 0.4px;
                    color: #065f46; border-left: 4px solid #059669; padding-left: 7px; }
 
   table.grid { width: 100%; border-collapse: collapse; }
   table.grid th, table.grid td { border: 1px solid #333; padding: 5px 6px; vertical-align: middle; }
+  table.grid td { vertical-align: top; }
+  
+  .ket { font-weight: normal; font-size: 7.5px; color: #374151;
+         line-height: 1.35; margin-top: 3px; text-align: left;
+         white-space: normal; word-break: break-word; }
+
   /* Header hijau ala spreadsheet */
   table.grid thead th { background: #059669; color: #fff; font-size: 9px;
                         letter-spacing: 0.3px; text-align: center; }
@@ -139,7 +148,7 @@ export function renderLaporanOperasionalHtml(d: LaporanOperasionalDTO): string {
         <th>PARKIR</th>
         <th>STEAM</th>
         <th>SERVIS</th>
-        <th>KET. LAIN</th>
+        <th style="min-width:150px">KET. LAIN</th>
         <th>TOTAL</th>
         <th style="width:48px">CUST.<br/>(tujuan)</th>
       </tr>

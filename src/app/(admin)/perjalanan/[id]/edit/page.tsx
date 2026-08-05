@@ -11,9 +11,13 @@ export default async function EditPerjalananPage({
 }) {
   const { id } = await params;
   const detail = await getPerjalananDetail(id);
+  
   if (!detail) notFound();
-  // Hanya DRAFT yang boleh diedit — selaras guard di Server Action.
-  if (detail.status !== "DRAFT") redirect(`/perjalanan/${id}`);
+  
+  // 👇 INI YANG KITA JEBOL: DRAFT dan DITUGASKAN boleh diedit!
+  if (detail.status !== "DRAFT" && detail.status !== "DITUGASKAN") {
+    redirect(`/perjalanan/${id}`);
+  }
 
   const options = await getFormOptions({
     kendaraanId: detail.kendaraanId,
@@ -23,10 +27,10 @@ export default async function EditPerjalananPage({
   return (
     <div className="space-y-2">
       <h1 className="text-2xl font-semibold text-slate-900">
-        Edit Draft — <span className="font-mono">{detail.nomorSj}</span>
+        Edit {detail.status === "DRAFT" ? "Draft" : "Surat Jalan"} — <span className="font-mono">{detail.nomorSj}</span>
       </h1>
       <p className="text-sm text-slate-500">
-        Perubahan hanya berlaku selama status masih DRAFT. Validasi kelayakan
+        Perubahan diizinkan sebelum driver memulai perjalanan. Validasi kelayakan
         armada &amp; driver dijalankan ulang saat diterbitkan.
       </p>
       <div className="pt-4">
