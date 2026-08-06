@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils/cn";
 import type { ActionState } from "@/lib/action-state";
 import { mintaRevisi, setujuiSettlement } from "../actions";
 import type { DetailVerifikasiDTO } from "../queries";
+import { urlBukti } from "@/lib/url-bukti";
 
 const LABEL_KATEGORI: Record<string, string> = {
   BBM: "BBM",
@@ -59,8 +60,6 @@ export function VerifikasiReview({ d }: { d: DetailVerifikasiDTO }) {
     setujuiSettlement,
     null
   );
-
-  // Navigasi sukses kini ditangani redirect() di Server Action (fix 404).
 
   const errorMsg = stateSetuju?.error ?? stateRevisi?.error;
 
@@ -177,11 +176,11 @@ export function VerifikasiReview({ d }: { d: DetailVerifikasiDTO }) {
                     <button
                       type="button"
                       suppressHydrationWarning
-                      onClick={() => setLightbox(b.fotoBuktiUrl)}
+                      onClick={() => setLightbox(urlBukti(b.fotoBuktiUrl) ?? "")}
                       className="group relative mt-1.5 block overflow-hidden rounded-lg border border-slate-200"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={b.fotoBuktiUrl} alt="bukti" className="h-16 w-24 object-cover" />
+                      <img src={urlBukti(b.fotoBuktiUrl) ?? ""} alt="bukti" className="h-16 w-24 object-cover" />
                       <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white transition group-hover:bg-black/40">
                         <ZoomIn size={16} className="opacity-0 group-hover:opacity-100" />
                       </span>

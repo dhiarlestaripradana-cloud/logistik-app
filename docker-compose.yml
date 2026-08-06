@@ -23,9 +23,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # Port diekspos ke host agar Prisma CLI di Windows/lokal bisa konek
-    # (permintaan owner — hindari error P1001). Di VPS PRODUKSI, pastikan
-    # firewall (ufw) menutup 5432 dari publik; cukup allow 80/443/SSH.
     ports:
       - "5433:5432"
     networks:
@@ -48,8 +45,8 @@ services:
       NEXTAUTH_URL: ${APP_URL}
       NODE_ENV: production
     volumes:
-      # Penyimpanan foto bukti (struk BBM, nota servis) — persisten di luar container.
-      - uploads:/app/public/uploads
+      # 👇 BERUBAH: Penyimpanan foto bukti di luar folder public
+      - uploads:/app/data/uploads
     networks:
       - internal
 

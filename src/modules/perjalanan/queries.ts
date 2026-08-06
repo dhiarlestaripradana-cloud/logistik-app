@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
 import { prisma } from "@/lib/db";
 import { TZ_WIB, formatTanggalID } from "@/lib/utils/date";
+import { urlBukti } from "@/lib/url-bukti";
 
 // =====================================================================
 //  Query modul Perjalanan — semua DTO plain-serializable
@@ -92,6 +93,13 @@ export type PerjalananDetailDTO = {
   totalKomitmen: number; // Σ(satpam+gudang) — estimasi biaya tetap per drop
   catatan: string | null;
   tujuan: TujuanDetailDTO[];
+  bukti: {
+    id: string;
+    kategori: string;
+    nominal: number;
+    keterangan: string | null;
+    url: string;
+  }[];
 };
 
 export async function getPerjalananDetail(
@@ -107,6 +115,8 @@ export async function getPerjalananDetail(
         include: { customer: true },
         orderBy: { urutan: "asc" },
       },
+      // Tarik juga laporan biayanya buat arsip foto bukti
+      laporan: { include: { biaya: { orderBy: { createdAt: "asc" } } } },
     },
   });
   if (!p) return null;
@@ -123,6 +133,16 @@ export async function getPerjalananDetail(
     uangGudang: Number(t.uangGudang),
     statusDrop: t.statusDrop,
   }));
+
+  const bukti = (p.laporan?.biaya ?? [])
+    .filter((b) => b.fotoBuktiUrl)
+    .map((b) => ({
+      id: b.id,
+      kategori: b.kategori,
+      nominal: Number(b.nominal),
+      keterangan: b.keterangan,
+      url: urlBukti(b.fotoBuktiUrl)!,
+    }));
 
   return {
     id: p.id,
@@ -142,6 +162,7 @@ export async function getPerjalananDetail(
     totalKomitmen: tujuan.reduce((s, t) => s + t.uangSatpam + t.uangGudang, 0),
     catatan: p.catatan,
     tujuan,
+    bukti,
   };
 }
 
@@ -176,11 +197,6 @@ export type FormOptions = {
   customers: CustomerOption[];
 };
 
-/**
- * @param includeKendaraanId / includeDriverId — dipakai mode EDIT DRAFT:
- * armada/driver yang sudah terpilih di draft tetap muncul di dropdown
- * meski statusnya kini tidak assignable (validasi ulang terjadi saat terbit).
- */
 export async function getFormOptions(include?: {
   kendaraanId?: string;
   driverId?: string;
@@ -242,8 +258,6 @@ export async function getFormOptions(include?: {
 // ---------------------------------------------------------------------
 
 export async function getDanaPending(): Promise<number> {
-  // Opsi B: tunai yang "di jalan" = uang jalan + uang drop tiap trip aktif —
-  // Kas Efektif dashboard kini mencerminkan seluruh uang fisik yang keluar laci.
   const trips = await prisma.perjalanan.findMany({
     where: { status: { in: [...STATUS_TRIP_AKTIF] } },
     select: {

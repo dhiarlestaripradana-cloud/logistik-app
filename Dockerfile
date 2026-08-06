@@ -34,11 +34,11 @@ ENV TZ=Asia/Jakarta
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
-# Chromium + font (untuk render PDF Surat Jalan / Buku Kas) + tzdata (WIB)
+# Chromium + font + tzdata (WIB) + TINI (Reaper / Pembunuh Zombie Chromium)
 RUN apk add --no-cache \
     chromium \
     nss freetype harfbuzz ca-certificates ttf-freefont font-noto-emoji \
-    tzdata openssl \
+    tzdata openssl tini \
   && cp /usr/share/zoneinfo/Asia/Jakarta /etc/localtime \
   && echo "Asia/Jakarta" > /etc/timezone
 
@@ -55,12 +55,15 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/prisma ./prisma
 
-# Folder upload
-RUN mkdir -p /app/public/uploads && chown -R nextjs:nodejs /app/public/uploads
+# Folder upload (DI LUAR public/ agar Next.js tidak 404 saat driver upload)
+RUN mkdir -p /app/data/uploads && chown -R nextjs:nodejs /app/data
+ENV UPLOAD_DIR=/app/data/uploads
 
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
 
-# Jalankan migrasi lalu start server
-CMD ["sh", "-c", "npx --yes prisma@6.19.3 migrate deploy && node server.js"]
+# tini -g: teruskan sinyal ke seluruh process group + reap semua yatim.
+ENTRYPOINT ["/sbin/tini", "-g", "--"]
+# `exec` → node MENGGANTIKAN sh, bukan jadi anaknya.
+CMD ["sh", "-c", "npx --yes prisma@6.19.3 migrate deploy && exec node server.js"]

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Pencil, Printer } from "lucide-react";
+import { Pencil, Printer, ExternalLink } from "lucide-react";
 import { getPerjalananDetail } from "@/modules/perjalanan/queries";
 import { STATUS_TRIP_BADGE } from "@/modules/perjalanan/components/perjalanan-table";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +43,7 @@ export default async function DetailPerjalananPage({
           </div>
         </div>
         <div className="flex gap-2">
-          {/* 👇 INI YANG DIUBAH: DRAFT atau DITUGASKAN bisa edit */}
+          {/* DRAFT atau DITUGASKAN bisa edit */}
           {(d.status === "DRAFT" || d.status === "DITUGASKAN") && (
             <Link href={`/perjalanan/${d.id}/edit`}>
               <Button variant="outline">
@@ -126,6 +126,55 @@ export default async function DetailPerjalananPage({
           </table>
         </div>
       </section>
+
+      {/* 👇 INI TAMBAHAN BARU: Kotak Arsip Foto Bukti */}
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+          Arsip Foto Bukti (Realisasi Laporan)
+        </h2>
+        
+        {/* Kalau belum ada foto (masih jalan/draft) atau driver gak upload foto */}
+        {!d.bukti || d.bukti.length === 0 ? (
+          <p className="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-400">
+            Tidak ada foto bukti yang dilampirkan untuk Surat Jalan ini.
+          </p>
+        ) : (
+          /* Kalau ada foto, tampilin grid galeri */
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+            {d.bukti.map((b) => (
+              <a
+                key={b.id}
+                href={b.url}
+                target="_blank"
+                rel="noreferrer"
+                className="group relative block overflow-hidden rounded-lg border border-slate-200 bg-slate-50 transition-all hover:border-blue-400 hover:shadow-md"
+              >
+                <div className="relative aspect-video overflow-hidden bg-slate-200">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={b.url}
+                    alt={b.kategori}
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-all duration-300 group-hover:bg-black/20">
+                    <ExternalLink size={20} className="text-white opacity-0 transition-opacity group-hover:opacity-100" />
+                  </div>
+                </div>
+                <div className="p-3 text-xs">
+                  <div className="font-semibold text-slate-700">{b.kategori}</div>
+                  <div className="font-medium text-slate-500">{formatRupiah(b.nominal)}</div>
+                  {b.keterangan && (
+                    <div className="mt-1 line-clamp-2 text-[10px] text-slate-400" title={b.keterangan}>
+                      {b.keterangan}
+                    </div>
+                  )}
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
+      </section>
+
     </div>
   );
 }

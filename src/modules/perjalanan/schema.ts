@@ -43,7 +43,7 @@ export const suratJalanSchema = z
     // kendaraan.odometerSaatIni (anti-typo & anti-manipulasi DevTools).
     uangJalan: z.coerce
       .number({ invalid_type_error: "Uang jalan harus angka" })
-      .positive("Uang jalan (kasbon) harus lebih dari 0"),
+      .min(0, "Uang jalan tidak boleh negatif"),
     catatan: optionalStr(1000),
     // Checkbox konfirmasi memakai armada PERLU_SERVIS untuk rute dekat.
     overrideServis: z.preprocess((v) => v === "1" || v === "on", z.boolean()),

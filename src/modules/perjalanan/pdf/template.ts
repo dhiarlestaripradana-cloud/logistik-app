@@ -151,7 +151,7 @@ export function renderSuratJalanHtml(d: PerjalananDetailDTO): string {
       <tr>
         <td>Uang Jalan (Kasbon Operasional)</td>
         <td class="sep">:</td>
-        <td class="num">${formatRupiah(d.uangJalan)}</td>
+        <td class="num">${d.uangJalan > 0 ? formatRupiah(d.uangJalan) : "— (tanpa kasbon)"}</td>
       </tr>
       <tr>
         <td>Uang Drop (Satpam + Gudang, ${d.tujuan.length} titik)</td>

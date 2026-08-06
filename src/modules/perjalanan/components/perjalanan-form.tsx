@@ -284,7 +284,7 @@ export function PerjalananForm({
         </h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="uangJalan">Uang Jalan Dibawa Driver (Rp) *</Label>
+            <Label htmlFor="uangJalan">Uang Jalan Dibawa Driver (Rp)</Label>
             <Input
               id="uangJalan"
               name="uangJalan"
@@ -292,13 +292,12 @@ export function PerjalananForm({
               inputMode="decimal"
               step="any"
               min={0}
-              defaultValue={initial?.uangJalan ?? ""}
-              placeholder="cth: 500000"
-              required
+              defaultValue={initial?.uangJalan ?? 0}
+              placeholder="0 — kosongkan bila driver tidak minta kasbon"
             />
             <p className="mt-1 text-xs text-slate-400">
-              TIDAK memotong Buku Kas sekarang — tercatat sebagai Dana Pending
-              hingga laporan driver diverifikasi (2-Step Settlement).
+              Boleh 0. Uang drop (satpam + gudang) tetap dihitung terpisah dan
+              tetap masuk Dana Pending.
             </p>
           </div>
           <div className="rounded-lg bg-slate-50 p-4 text-sm">
