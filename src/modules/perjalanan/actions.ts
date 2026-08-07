@@ -38,8 +38,23 @@ async function pastikanLayakTerbit(
   if (!k) throw new TripError("Armada tidak ditemukan.");
   if (k.status === "NONAKTIF" || k.status === "DALAM_SERVIS")
     throw new TripError(`Armada ${k.nomorPolisi} berstatus ${k.status.replaceAll("_", " ")} — tidak dapat ditugaskan.`);
-  if (k.status === "DALAM_PERJALANAN")
-    throw new TripError(`Armada ${k.nomorPolisi} sedang dalam perjalanan lain.`);
+  
+  // 👇 BERUBAH: Pengecekan DALAM_PERJALANAN agar fitur Edit SJ berfungsi normal
+  if (k.status === "DALAM_PERJALANAN") {
+    const pemegang = await tx.perjalanan.findFirst({
+      where: {
+        kendaraanId: args.kendaraanId,
+        status: { in: ["DITUGASKAN", "BERJALAN"] },
+        ...(args.kecualiTripId ? { id: { not: args.kecualiTripId } } : {}),
+      },
+      select: { nomorSj: true },
+    });
+    if (pemegang)
+      throw new TripError(
+        `Armada ${k.nomorPolisi} sedang dipakai Surat Jalan ${pemegang.nomorSj}.`
+      );
+  }
+
   // Soft-block Blueprint 3: PERLU_SERVIS boleh jalan HANYA dengan override sadar.
   if (k.status === "PERLU_SERVIS" && !args.overrideServis)
     throw new TripError(

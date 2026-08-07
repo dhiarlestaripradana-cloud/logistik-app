@@ -10,6 +10,15 @@ services:
     container_name: logistik_db
     init: true
     restart: unless-stopped
+    mem_limit: 768m
+    mem_reservation: 256m
+    command: >
+      postgres
+      -c shared_buffers=192MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c max_connections=50
+      -c effective_cache_size=512MB
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -34,12 +43,17 @@ services:
       dockerfile: Dockerfile
     container_name: logistik_app
     restart: unless-stopped
+    mem_limit: 1792m
+    mem_reservation: 512m
     depends_on:
       db:
         condition: service_healthy
     environment:
       TZ: Asia/Jakarta
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      # 👇 BERUBAH: Tambahan limit koneksi di ujung URL
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public&connection_limit=5&pool_timeout=20
+      # 👇 BERUBAH: Penambahan NODE_OPTIONS di sini
+      NODE_OPTIONS: "--max-old-space-size=640"
       AUTH_SECRET: ${AUTH_SECRET}
       AUTH_TRUST_HOST: "true"
       NEXTAUTH_URL: ${APP_URL}
@@ -54,6 +68,8 @@ services:
     image: caddy:2-alpine
     container_name: logistik_caddy
     restart: unless-stopped
+    # 👇 BERUBAH: Penambahan limit RAM untuk caddy di sini
+    mem_limit: 128m
     depends_on:
       - app
     ports:
