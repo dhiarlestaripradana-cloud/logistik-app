@@ -1,6 +1,5 @@
 import { PrismaClient } from "@prisma/client";
 
-// Singleton agar tidak membuat koneksi baru tiap hot-reload saat development.
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };

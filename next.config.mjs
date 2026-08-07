@@ -16,7 +16,7 @@ const nextConfig = {
     serverActions: {
       // Laporan driver membawa beberapa foto (masing2 < 300KB hasil kompresi
       // klien) — default 1MB terlalu sempit.
-      bodySizeLimit: "10mb",
+      bodySizeLimit: "6mb",
     },
   },
 };
