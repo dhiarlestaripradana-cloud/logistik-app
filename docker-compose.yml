@@ -1,10 +1,20 @@
-# =============================================================
-#  docker-compose.yml — Stack Produksi VPS
-#  Layanan: app (Next.js) · db (PostgreSQL 16) · caddy (reverse proxy + HTTPS otomatis)
-#  Timezone dipaksa ke Asia/Jakarta (WIB) di seluruh container.
-# =============================================================
-
 services:
+  # 👇 Robot khusus buat migrasi DB. Jalan sekali, terus mati.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+    restart: "no"
+
   db:
     image: postgres:16-alpine
     container_name: logistik_db
@@ -34,7 +44,6 @@ services:
       retries: 5
     networks:
       - internal
-    # 👇 PORT SUDAH DIHAPUS (Database aman dari incaran luar)
 
   app:
     build:
@@ -44,7 +53,6 @@ services:
     restart: unless-stopped
     mem_limit: 1792m
     mem_reservation: 512m
-    # 👇 PENGERASAN KEAMANAN (Malware tidak bisa eksekusi dari sini)
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=256m
     security_opt:
@@ -54,6 +62,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       TZ: Asia/Jakarta
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public&connection_limit=5&pool_timeout=20
@@ -86,6 +96,7 @@ services:
       - caddy_config:/config
     networks:
       - internal
+      - edge
 
 volumes:
   pgdata:
@@ -96,3 +107,6 @@ volumes:
 networks:
   internal:
     driver: bridge
+    internal: true # 🛑 Aplikasi Next.js & DB diisolasi total dari internet luar
+  edge:
+    driver: bridge # 🌍 Caddy diizinkan ke internet untuk ambil sertifikat SSL

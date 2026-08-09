@@ -63,7 +63,5 @@ USER nextjs
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
 
-# tini -g: teruskan sinyal ke seluruh process group + reap semua yatim.
 ENTRYPOINT ["/sbin/tini", "-g", "--"]
-# `exec` → node MENGGANTIKAN sh, bukan jadi anaknya.
-CMD ["sh", "-c", "npx --yes prisma@6.19.3 migrate deploy && exec node server.js"]
+CMD ["node", "server.js"]

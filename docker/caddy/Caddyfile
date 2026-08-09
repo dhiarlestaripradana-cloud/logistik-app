@@ -1,8 +1,16 @@
-# HTTPS otomatis via Let's Encrypt. Ganti {$APP_DOMAIN} lewat env di compose.
 {$APP_DOMAIN} {
     encode gzip zstd
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options    "nosniff"
+        X-Frame-Options           "DENY"
+        Referrer-Policy           "strict-origin-when-cross-origin"
+        Permissions-Policy        "geolocation=(), microphone=(), camera=()"
+        -Server
+    }
+
     reverse_proxy app:3000
-    # Batasi ukuran upload foto bukti (sudah dikompresi klien < 300KB, beri buffer)
     request_body {
         max_size 10MB
     }
