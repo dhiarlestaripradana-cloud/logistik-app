@@ -9,3 +9,4 @@ node_modules/
 # Artefak service worker (digenerate saat build)
 /public/sw.js
 /public/swe-worker*.js
+docker-compose.override.yml

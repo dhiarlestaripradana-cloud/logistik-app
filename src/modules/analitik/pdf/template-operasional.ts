@@ -5,8 +5,9 @@ import type { LaporanOperasionalDTO } from "../queries";
 // =====================================================================
 //  PDF LAPORAN OPERASIONAL PERIODIK (gaya spreadsheet).
 //  Header tabel hijau, border solid — meniru tampilan Excel.
-//  Dua tabel: (1) rincian biaya operasional per driver,
-//             (2) pembelian BBM per driver × armada × jenis BBM.
+//  Tiga tabel: (1) rincian biaya operasional per driver,
+//              (2) pembelian BBM per driver × armada × jenis BBM.
+//              (3) rincian rute/tujuan per driver.
 // =====================================================================
 
 const esc = (s: string | null | undefined) =>
@@ -74,6 +75,20 @@ export function renderLaporanOperasionalHtml(d: LaporanOperasionalDTO): string {
         <td class="num">${rp(d.total2Bbm)}</td>
       </tr>`;
 
+  // ── Tabel 3: RINCIAN RUTE DRIVER (TAMBAHAN BARU) ──
+  // Menggunakan optional chaining (?.) untuk jaga-jaga kalau datanya belum siap dari backend
+  const baris3 = d.tabel3?.map(
+      (r, i) => `
+      <tr>
+        <td class="c">${i + 1}</td>
+        <td class="b">${esc(r.driver)}</td>
+        <td class="c">${esc(r.tanggal)}</td>
+        <td class="mono c">${esc(r.noSuratJalan)}</td>
+        <td>${esc(r.namaCustomer)}</td>
+        <td>${esc(r.wilayah)}</td>
+      </tr>`
+    ).join("");
+
   const kosong = (colspan: number) =>
     `<tr><td colspan="${colspan}" class="c muted" style="padding:14px">Tidak ada data pada periode/filter ini.</td></tr>`;
 
@@ -100,7 +115,10 @@ export function renderLaporanOperasionalHtml(d: LaporanOperasionalDTO): string {
                       background: #065f46; color: #fff; border-radius: 10px; font-size: 9px; }
 
   h3.judul-tabel { margin: 16px 0 6px; font-size: 11px; letter-spacing: 0.4px;
-                   color: #065f46; border-left: 4px solid #059669; padding-left: 7px; }
+                   color: #065f46; border-left: 4px solid #059669; padding-left: 7px; page-break-before: auto; }
+  
+  /* Supaya tabel rute yang panjang bisa pindah halaman dengan rapi */
+  .page-break-before { page-break-before: always; margin-top: 20px; }
 
   table.grid { width: 100%; border-collapse: collapse; }
   table.grid th, table.grid td { border: 1px solid #333; padding: 5px 6px; vertical-align: middle; }
@@ -177,6 +195,22 @@ export function renderLaporanOperasionalHtml(d: LaporanOperasionalDTO): string {
     ${d.tabel2.length ? `<tfoot>${totalRow2}</tfoot>` : ""}
   </table>
 
+  <h3 class="judul-tabel page-break-before">TABEL 3 — RINCIAN RUTE DRIVER</h3>
+  <table class="grid">
+    <thead>
+      <tr>
+        <th style="width:26px">NO</th>
+        <th style="width:110px">DRIVER</th>
+        <th style="width:70px">TANGGAL</th>
+        <th style="width:100px">NO. SURAT JALAN</th>
+        <th>NAMA CUSTOMER</th>
+        <th>WILAYAH</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${baris3 || kosong(6)}
+    </tbody>
+  </table>
   <div class="ttd">
     <div class="ttd-box">
       <div>Mengetahui / Menyetujui,</div>
@@ -185,8 +219,8 @@ export function renderLaporanOperasionalHtml(d: LaporanOperasionalDTO): string {
   </div>
 
   <div class="footer">
-    SATPAM &amp; GUDANG = uang drop (komitmen toko) · JENIS BBM = produk yang tercatat
-    saat pembelian oleh driver · hanya trip berstatus SELESAI yang direkap ·
+    SATPAM &amp; GUDANG = uang drop (komitmen toko) [cite: 8] · JENIS BBM = produk yang tercatat
+    saat pembelian oleh driver [cite: 8] · hanya trip berstatus SELESAI yang direkap [cite: 8] ·
     Dicetak oleh Sistem Operasional ${esc(PERUSAHAAN.nama)}
   </div>
 </body>

@@ -330,6 +330,16 @@ export type OpsBarisBbm = {
   totalBbm: number;
 };
 
+// 1. Tipe data baru untuk menampung Rute <--- BARU
+export type OpsBarisRute = {
+  driverId: string;
+  driver: string;
+  tanggal: string;
+  noSuratJalan: string;
+  namaCustomer: string;
+  wilayah: string;
+};
+
 export type LaporanOperasionalDTO = {
   periodeLabel: string;
   modeLabel: string; 
@@ -337,6 +347,7 @@ export type LaporanOperasionalDTO = {
   total1: OpsTotalCustomer;
   tabel2: OpsBarisBbm[];
   total2Bbm: number;
+  tabel3: OpsBarisRute[]; // 2. Daftarkan tabel3 di Blueprint DTO <--- BARU
 };
 
 function jenisBbmDariKeterangan(ket: string | null): string {
@@ -372,7 +383,14 @@ export async function getLaporanOperasional(f: {
     include: {
       driver: { select: { id: true, nama: true } },
       kendaraan: { select: { nomorPolisi: true, merk: true, tipe: true } },
-      tujuan: { select: { uangSatpam: true, uangGudang: true } },
+      // 3. Tambahin instruksi ambil info customer dari relasi tujuan <--- BARU
+      tujuan: { 
+        select: { 
+          uangSatpam: true, 
+          uangGudang: true,
+          customer: { select: { nama: true, wilayah: true } }
+        } 
+      },
       laporan: {
         include: {
           biaya: { select: { kategori: true, nominal: true, keterangan: true } },
@@ -384,9 +402,25 @@ export async function getLaporanOperasional(f: {
 
   const peta1 = new Map<string, OpsBarisCustomer>();
   const peta2 = new Map<string, OpsBarisBbm>();
+  const tabel3: OpsBarisRute[] = []; // 4. Siapkan keranjang penampung data Rute <--- BARU
 
   for (const t of trips) {
     const did = t.driver.id;
+
+    // --- LOGIK ISI TABEL 3 RUTE <--- BARU ---
+    // Karena satu surat jalan bisa ke beberapa toko, kita gabung pakai pemisah koma (;)
+    const namaCustomers = t.tujuan.map(tj => tj.customer?.nama || "(Tanpa Nama)").join(" ; ");
+    const wilayahs = t.tujuan.map(tj => tj.customer?.wilayah || "-").join(" ; ");
+    
+    tabel3.push({
+      driverId: did,
+      driver: t.driver.nama,
+      tanggal: formatTanggalID(t.tanggalBerangkat),
+      noSuratJalan: t.nomorSj,
+      namaCustomer: namaCustomers,
+      wilayah: wilayahs,
+    });
+    // ---------------------------------------
 
     let r1 = peta1.get(did);
     if (!r1) {
@@ -486,5 +520,6 @@ export async function getLaporanOperasional(f: {
     total1,
     tabel2,
     total2Bbm,
+    tabel3, // 5. Kirim data tabel3 ke file PDF HTML tadi <--- BARU
   };
 }
